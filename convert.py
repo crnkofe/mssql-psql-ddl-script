@@ -210,7 +210,7 @@ def extract_column(line):
     if 'constraint' in split_cleaned_line:
         return None
 
-    if len(split_cleaned_line) == 0:
+    if len(split_cleaned_line) < 2:
         logging.debug('Skipping empty column')
         return None
 
@@ -257,7 +257,8 @@ def extract_m1_table_name(line):
         .replace('(', '')\
         .strip()
     dot_name = name.split('.')
-    return dot_name[len(dot_name)-1]
+    last_dot_name = dot_name[len(dot_name)-1]
+    return last_dot_name.split()[0]
 
 
 filename = sys.argv[1]
