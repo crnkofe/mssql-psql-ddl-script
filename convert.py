@@ -20,12 +20,18 @@ class Table(object):
         column_statements = []
         for column in self.columns:
             column_statements.append("\t{col}".format(col=column.as_create_table_column()))
-        statements.append(',\n'.join(column_statements))
-        statements.append(');')
+        if column_statements != []:
+            statements.append(',\n'.join(column_statements))
+            statements.append(');')
+        else:
+            statements[-1] += ');'
         return '\n'.join(statements)
 
     def as_create_constraints(self):
-        return ""
+        constraints = []
+        for constraint in self.constraints:
+            constraints.append(constraint.as_alter_table_create_constraint())
+        return '\n'.join(constraints)
 
 
 class Column(object):
@@ -141,6 +147,28 @@ class Column(object):
         return 'unknown({})'.format(from_type)
 
 
+class PrimaryKeyConstraint(object):
+
+    def __init__(self, column_name, table_name):
+        self.column_name = column_name
+        self.table_name = table_name
+
+    def as_alter_table_create_constraint(self):
+        return 'ALTER TABLE {table} ADD PRIMARY KEY ({column});'.format(
+            table=self.table_name,
+            column=self.column_name
+        )
+
+
+"""
+            return 'ALTER TABLE {table} ADD CONSTRAINT {constraint_name} FOREIGN KEY ({column}) REFERENCES {target_table'.format(
+                table=self.table_name,
+                constraint_name=self.constraint_name,
+                column=self.column_name
+            )
+"""
+
+
 class StatementTracker(object):
 
     def __init__(self):
@@ -176,16 +204,23 @@ class StatementTracker(object):
     def parse_table(self, table):
         table_name = ""
         columns = []
+        constraints = []
         for idx, line in enumerate(table):
             if idx == 0:
                 table_name = extract_m1_table_name(line)
-            elif idx == len(table)-1:
                 continue
-            else:
-                column = extract_column(line)
-                if column is not None:
-                    columns.append(column)
-        return Table(table_name, columns, [])
+
+            column = extract_column(line)
+            if column is not None:
+                columns.append(column)
+                continue
+
+            if column is None:
+                constraint = extract_constraint(line, table_name)
+                if constraint is not None:
+                    constraints.append(constraint)
+
+        return Table(table_name, columns, constraints)
 
     def as_psql(self):
         ret = []
@@ -233,6 +268,33 @@ def extract_column(line):
         not_null = False
 
     return Column(name, column_type, column_type_extension=extension, not_null=not_null)
+
+
+def extract_constraint(line, table_name):
+    cleaned_line = remove_unwanted_chars(line)
+    split_cleaned_line = [y for y in [x.strip() for x in cleaned_line.split()] if not len(y) == 0]
+    cleaned_line = ' '.join(split_cleaned_line)
+
+    if 'primary' in split_cleaned_line and 'key' in split_cleaned_line:
+        keywords = ('primary', 'key', 'clustered', 'nonclustered', 'hash')
+
+        constraint_name = None
+        constraint_field = None
+        name_found = False
+        #print(split_cleaned_line)
+        for idx, word in enumerate(split_cleaned_line):
+            #print(word)
+            if word == 'constraint':
+                constraint_name = split_cleaned_line[idx+1]
+                name_found = True
+                continue
+            if name_found and word != constraint_name and word not in keywords:
+                #print("nasda", word)
+                constraint_field = word
+                break
+
+        return PrimaryKeyConstraint(constraint_field, table_name)
+    return None
 
 
 def remove_unwanted_chars(line):
