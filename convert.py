@@ -16,7 +16,7 @@ class Table(object):
         self.constraints = constraints
 
     def as_create_table(self):
-        statements = ["CREATE TABLE {name} (".format(name=self.name)]
+        statements = ["CREATE TABLE {name} IF NOT EXISTS (".format(name=self.name)]
         column_statements = []
         for column in self.columns:
             column_statements.append("\t{col}".format(col=column.as_create_table_column()))
@@ -96,6 +96,8 @@ class Column(object):
             'date': 'date',
             'datetime': 'timestamp(3)',
             'double precision': 'double precision',
+            'float': 'double precision',
+            'real': 'double precision',
             'image': 'bytea',
             'int': 'int',
             'integer': 'integer',
@@ -123,6 +125,7 @@ class Column(object):
             'datetime2': lambda x: 'timestamp({n})'.format(n=x or 3),
             'datetimeoffset': lambda x: 'timestamp({n})'.format(n=x or 3),
             'dec': lambda x: 'dec({m}, {n})'.format(m=x[0], n=x[1])  if x is not None else 'dec',
+            'numeric': lambda x: 'decimal({m})'.format(m=x)  if x is not None else 'decimal',
             'decimal': lambda x: 'decimal({m}, {n})'.format(m=x[0], n=x[1]) if x is not None else 'decimal',
         }
         #'char': 'char'
@@ -135,7 +138,7 @@ class Column(object):
         compound_func = compound_type_map.get(from_type, None)
         if compound_func is not None:
             return compound_func(self.column_type_extension)
-        return 'unknown'
+        return 'unknown({})'.format(from_type)
 
 
 class StatementTracker(object):
@@ -196,7 +199,7 @@ class StatementTracker(object):
 def is_m1_table_line(line):
     split_line = line.split()
     return 'create' in split_line and \
-        'table' in split_line and line.endswith('(')
+        'table' in split_line # and line.endswith('(')
 
 
 def extract_column(line):
